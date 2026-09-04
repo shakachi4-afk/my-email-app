@@ -1,25 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>My Email Sender</title>
+  <meta charset="UTF-8" />
+  <title>AOL Email Sender</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 500px; }
+    input, textarea, button { width: 100%; margin-bottom: 12px; padding: 8px; box-sizing: border-box; }
+    textarea { height: 100px; }
+  </style>
 </head>
 <body>
   <h2>Send an Email via AOL</h2>
   <form id="emailForm">
-    <p><input type="email" id="to" placeholder="Recipient Email" required style="width:300px;"></p>
-    <p><input type="text" id="subject" placeholder="Subject Line" required style="width:300px;"></p>
-    <p><textarea id="htmlBody" placeholder="Message content. Links allowed: <a href='https://google.com'>Click Here</a>" style="width:300px; height:100px;"></p>
-    <p><label>Optional Delay (1 to 8 seconds): </label><input type="number" id="delaySeconds" value="0" min="0" max="8"></p>
-    <p><label>Attach File: </label><input type="file" id="fileInput"></p>
-    <p><button type="submit">Send Email Now</button></p>
+    <input type="email" id="to" placeholder="Recipient Email" required />
+    <input type="text" id="subject" placeholder="Subject Line" required />
+    <textarea id="htmlBody" placeholder="HTML Body (e.g. <a href='https://google.com'>Link</a>)"></textarea>
+    
+    <label>Delay sending (seconds, max 8):</label>
+    <input type="number" id="delaySeconds" value="0" min="0" max="8" />
+    
+    <label>Attachment:</label>
+    <input type="file" id="fileInput" />
+
+    <button type="submit" id="sendBtn">Send Email</button>
   </form>
+
   <p id="status"></p>
 
   <script>
     document.getElementById("emailForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const status = document.getElementById("status");
-      status.innerText = "Sending... Please wait.";
+      const btn = document.getElementById("sendBtn");
+      
+      status.innerText = "Sending email...";
+      btn.disabled = true;
 
       const fileInput = document.getElementById("fileInput");
       let fileBase64 = null;
@@ -51,13 +66,16 @@
           body: JSON.stringify(payload)
         });
         const result = await res.json();
+        
         if (res.ok) {
           status.innerText = "Success! Email sent.";
         } else {
-          status.innerText = "Error: " + result.error;
+          status.innerText = "Error: " + (result.error || "Failed to send.");
         }
       } catch (err) {
         status.innerText = "Failed to communicate with the server.";
+      } finally {
+        btn.disabled = false;
       }
     });
   </script>
