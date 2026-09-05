@@ -7,13 +7,7 @@ exports.handler = async (event) => {
 
   try {
     const data = JSON.parse(event.body);
-    const { to, subject, htmlBody, delaySeconds, fileBase64, fileName } = data;
-
-    // Optional short timer delay
-    if (delaySeconds && delaySeconds > 0) {
-      const waitTime = Math.min(delaySeconds, 8) * 1000;
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
-    }
+    const { to, subject, htmlBody, fileBase64, fileName } = data;
 
     // Connect to AOL SMTP
     const transporter = nodemailer.createTransport({
