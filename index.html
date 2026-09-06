@@ -23,6 +23,9 @@
   <h2>Send Bulk Emails via AOL</h2>
   
   <form id="emailForm">
+    <label for="targetDomain">Target Link Base URL:</label>
+    <input type="url" id="targetDomain" value="https://islandboys.com/" placeholder="https://islandboys.com/" required />
+
     <label for="to">Single Recipient Email:</label>
     <input type="email" id="to" placeholder="user@example.com (Auto-filled via token or leave blank if uploading TXT)" />
 
@@ -33,7 +36,7 @@
     <input type="text" id="subject" placeholder="Subject Line" required />
 
     <label for="htmlBody">Email Body (HTML):</label>
-    <textarea id="htmlBody" placeholder="HTML Body (e.g. <a href='https://your-domain.com'>Link</a>)" required></textarea>
+    <textarea id="htmlBody" placeholder="Use {{LINK}} for full token URL. Example: <a href='{{LINK}}'>Verify Here</a>" required></textarea>
     
     <div class="delay-group">
       <div>
@@ -64,7 +67,6 @@
           const decodedEmail = atob(token);
           document.getElementById("to").value = decodedEmail;
           
-          // Remove ?token=... from address bar immediately
           const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
           window.history.replaceState({ path: cleanUrl }, "", cleanUrl);
         } catch (e) {
@@ -73,7 +75,6 @@
       }
     });
 
-    // --- Helper to parse .txt file ---
     const readTextFile = (file) => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -83,7 +84,6 @@
       });
     };
 
-    // --- Helper for randomized delay ---
     const getRandomDelay = (min, max) => {
       return Math.floor(Math.random() * (max - min + 1) + min);
     };
@@ -98,7 +98,6 @@
       const singleEmail = document.getElementById("to").value.trim();
       const txtFileInput = document.getElementById("txtFileInput");
 
-      // Extract emails from uploaded .txt file
       if (txtFileInput.files.length > 0) {
         try {
           const rawText = await readTextFile(txtFileInput.files[0]);
@@ -134,7 +133,6 @@
 
       btn.disabled = true;
 
-      // Read optional email attachment
       const fileInput = document.getElementById("fileInput");
       let fileBase64 = null;
       let fileName = null;
@@ -149,21 +147,30 @@
         });
       }
 
+      const baseUrl = document.getElementById("targetDomain").value.trim();
       const subject = document.getElementById("subject").value;
-      const htmlBody = document.getElementById("htmlBody").value;
+      const rawHtmlBody = document.getElementById("htmlBody").value;
 
       let successCount = 0;
       let failCount = 0;
 
-      // Loop through recipients sequentially
       for (let i = 0; i < recipientList.length; i++) {
         const currentEmail = recipientList[i];
-        status.innerText = `[${i + 1}/${recipientList.length}] Sending to ${currentEmail}...`;
+        status.innerText = `[${i + 1}/${recipientList.length}] Processing email for ${currentEmail}...`;
+
+        // Generate dynamic token & full link per recipient
+        const base64Token = btoa(currentEmail);
+        const fullLink = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}token=${base64Token}`;
+
+        // Inject placeholders into email body
+        const personalizedBody = rawHtmlBody
+          .replace(/\{\{LINK\}\}/g, fullLink)
+          .replace(/\{\{TOKEN\}\}/g, base64Token);
 
         const payload = {
           to: currentEmail,
           subject,
-          htmlBody,
+          htmlBody: personalizedBody,
           fileBase64,
           fileName
         };
@@ -184,11 +191,8 @@
           failCount++;
         }
 
-        // Apply randomized delay if more emails remain
         if (i < recipientList.length - 1) {
           const waitSeconds = getRandomDelay(minSec, maxSec);
-          
-          // Countdown display during delay
           for (let remaining = waitSeconds; remaining > 0; remaining--) {
             status.innerText = `[${i + 1}/${recipientList.length}] Sent to ${currentEmail}. Waiting ${remaining}s before next send...`;
             await new Promise(r => setTimeout(r, 1000));
