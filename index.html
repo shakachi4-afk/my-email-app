@@ -2,40 +2,139 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>AOL Email Sender</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AOL Bulk Email Sender</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 500px; }
-    input, textarea, button { width: 100%; margin-bottom: 12px; padding: 8px; box-sizing: border-box; }
-    textarea { height: 100px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 550px; margin: 0 auto; color: #333; }
+    h2 { margin-bottom: 20px; }
+    label { font-weight: bold; display: block; margin-top: 12px; margin-bottom: 4px; font-size: 14px; }
+    input, textarea, button { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+    textarea { height: 110px; resize: vertical; }
+    .delay-group { display: flex; gap: 10px; }
+    .delay-group > div { flex: 1; }
+    button { background-color: #005fcc; color: white; font-weight: bold; border: none; margin-top: 18px; cursor: pointer; transition: background 0.2s; }
+    button:hover { background-color: #004499; }
+    button:disabled { background-color: #999; cursor: not-allowed; }
+    .status-box { margin-top: 15px; padding: 12px; border-radius: 4px; background: #f4f4f5; font-weight: 600; font-size: 14px; min-height: 20px; word-break: break-word; }
   </style>
 </head>
 <body>
-  <h2>Send an Email via AOL</h2>
+
+  <h2>Send Bulk Emails via AOL</h2>
+  
   <form id="emailForm">
-    <input type="email" id="to" placeholder="Recipient Email" required />
+    <label for="to">Single Recipient Email:</label>
+    <input type="email" id="to" placeholder="user@example.com (Auto-filled via token or leave blank if uploading TXT)" />
+
+    <label for="txtFileInput">Or Upload Recipients (.txt file, 1 email per line):</label>
+    <input type="file" id="txtFileInput" accept=".txt" />
+
+    <label for="subject">Subject Line:</label>
     <input type="text" id="subject" placeholder="Subject Line" required />
-    <textarea id="htmlBody" placeholder="HTML Body (e.g. <a href='https://google.com'>Link</a>)"></textarea>
+
+    <label for="htmlBody">Email Body (HTML):</label>
+    <textarea id="htmlBody" placeholder="HTML Body (e.g. <a href='https://your-domain.com'>Link</a>)" required></textarea>
     
-    <label>Delay sending (seconds, max 8):</label>
-    <input type="number" id="delaySeconds" value="0" min="0" max="8" />
+    <div class="delay-group">
+      <div>
+        <label for="minDelay">Min Delay (sec):</label>
+        <input type="number" id="minDelay" value="180" min="1" required />
+      </div>
+      <div>
+        <label for="maxDelay">Max Delay (sec):</label>
+        <input type="number" id="maxDelay" value="420" min="2" required />
+      </div>
+    </div>
     
-    <label>Attachment:</label>
+    <label for="fileInput">Attachment File (Optional):</label>
     <input type="file" id="fileInput" />
 
-    <button type="submit" id="sendBtn">Send Email</button>
+    <button type="submit" id="sendBtn">Send Email(s)</button>
   </form>
 
-  <p id="status"></p>
+  <div id="status" class="status-box">Idle</div>
 
   <script>
+    // --- Parse Base64 Token & Clean URL on Page Load ---
+    window.addEventListener("DOMContentLoaded", () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get("token");
+      if (token) {
+        try {
+          const decodedEmail = atob(token);
+          document.getElementById("to").value = decodedEmail;
+          
+          // Remove ?token=... from address bar immediately
+          const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+          window.history.replaceState({ path: cleanUrl }, "", cleanUrl);
+        } catch (e) {
+          console.error("Invalid token format.");
+        }
+      }
+    });
+
+    // --- Helper to parse .txt file ---
+    const readTextFile = (file) => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+    };
+
+    // --- Helper for randomized delay ---
+    const getRandomDelay = (min, max) => {
+      return Math.floor(Math.random() * (max - min + 1) + min);
+    };
+
+    // --- Form Submission Handler ---
     document.getElementById("emailForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const status = document.getElementById("status");
       const btn = document.getElementById("sendBtn");
       
-      status.innerText = "Sending email...";
+      let recipientList = [];
+      const singleEmail = document.getElementById("to").value.trim();
+      const txtFileInput = document.getElementById("txtFileInput");
+
+      // Extract emails from uploaded .txt file
+      if (txtFileInput.files.length > 0) {
+        try {
+          const rawText = await readTextFile(txtFileInput.files[0]);
+          recipientList = rawText
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line.length > 0 && line.includes("@"));
+        } catch (err) {
+          status.innerText = "Error reading recipient TXT file.";
+          return;
+        }
+      } else if (singleEmail) {
+        recipientList.push(singleEmail);
+      }
+
+      if (recipientList.length === 0) {
+        alert("Please enter a single email or upload a .txt file containing recipients.");
+        return;
+      }
+
+      if (recipientList.length > 50) {
+        alert("Maximum limit is 50 emails per batch. Trimming list to first 50.");
+        recipientList = recipientList.slice(0, 50);
+      }
+
+      const minSec = parseInt(document.getElementById("minDelay").value) || 10;
+      const maxSec = parseInt(document.getElementById("maxDelay").value) || 30;
+
+      if (minSec >= maxSec) {
+        alert("Min Delay must be smaller than Max Delay.");
+        return;
+      }
+
       btn.disabled = true;
 
+      // Read optional email attachment
       const fileInput = document.getElementById("fileInput");
       let fileBase64 = null;
       let fileName = null;
@@ -50,34 +149,57 @@
         });
       }
 
-      const payload = {
-        to: document.getElementById("to").value,
-        subject: document.getElementById("subject").value,
-        htmlBody: document.getElementById("htmlBody").value,
-        delaySeconds: parseInt(document.getElementById("delaySeconds").value),
-        fileBase64,
-        fileName
-      };
+      const subject = document.getElementById("subject").value;
+      const htmlBody = document.getElementById("htmlBody").value;
 
-      try {
-        const res = await fetch("/.netlify/functions/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const result = await res.json();
-        
-        if (res.ok) {
-          status.innerText = "Success! Email sent.";
-        } else {
-          status.innerText = "Error: " + (result.error || "Failed to send.");
+      let successCount = 0;
+      let failCount = 0;
+
+      // Loop through recipients sequentially
+      for (let i = 0; i < recipientList.length; i++) {
+        const currentEmail = recipientList[i];
+        status.innerText = `[${i + 1}/${recipientList.length}] Sending to ${currentEmail}...`;
+
+        const payload = {
+          to: currentEmail,
+          subject,
+          htmlBody,
+          fileBase64,
+          fileName
+        };
+
+        try {
+          const res = await fetch("/.netlify/functions/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          failCount++;
         }
-      } catch (err) {
-        status.innerText = "Failed to communicate with the server.";
-      } finally {
-        btn.disabled = false;
+
+        // Apply randomized delay if more emails remain
+        if (i < recipientList.length - 1) {
+          const waitSeconds = getRandomDelay(minSec, maxSec);
+          
+          // Countdown display during delay
+          for (let remaining = waitSeconds; remaining > 0; remaining--) {
+            status.innerText = `[${i + 1}/${recipientList.length}] Sent to ${currentEmail}. Waiting ${remaining}s before next send...`;
+            await new Promise(r => setTimeout(r, 1000));
+          }
+        }
       }
+
+      status.innerText = `Finished batch! Successfully sent: ${successCount} | Failed: ${failCount}`;
+      btn.disabled = false;
     });
   </script>
+
 </body>
 </html>
